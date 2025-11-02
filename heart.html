@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <title>Heart Animation</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap');
+    
+    body {
+      margin: 0;
+      background-color: black;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    canvas {
+      background-color: black;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="heart"></canvas>
+
+  <script>
+    const CANVAS_WIDTH = 640;
+    const CANVAS_HEIGHT = 480;
+    const CENTER_X = CANVAS_WIDTH / 2;
+    const CENTER_Y = CANVAS_HEIGHT / 2;
+    const ENLARGE = 11;
+    const HEART_COLOR = "#f76070";
+    const NAME = "An"
+
+    const canvas = document.getElementById("heart");
+    canvas.width = CANVAS_WIDTH;
+    canvas.height = CANVAS_HEIGHT;
+    const ctx = canvas.getContext("2d");
+
+    function heartFunction(t, shrink = ENLARGE) {
+      let x = 16 * Math.pow(Math.sin(t), 3);
+      let y = -(13 * Math.cos(t) - 5 * Math.cos(2 * t)
+                - 2 * Math.cos(3 * t) - Math.cos(4 * t));
+      x *= shrink;
+      y *= shrink;
+      x += CENTER_X;
+      y += CENTER_Y;
+      return [x, y];
+    }
+
+    function scatterInside(x, y, beta = 0.15) {
+      const ratioX = -beta * Math.log(Math.random());
+      const ratioY = -beta * Math.log(Math.random());
+      const dx = ratioX * (x - CENTER_X);
+      const dy = ratioY * (y - CENTER_Y);
+      return [x - dx, y - dy];
+    }
+
+    function shrink(x, y, ratio) {
+      const force = -1 / Math.pow((Math.pow(x - CENTER_X, 2)
+                    + Math.pow(y - CENTER_Y, 2)), 0.6);
+      const dx = ratio * force * (x - CENTER_X);
+      const dy = ratio * force * (y - CENTER_Y);
+      return [x - dx, y - dy];
+    }
+
+    function curve(p) {
+      return 2 * (2 * Math.sin(4 * p)) / (2 * Math.PI);
+    }
+
+    class Heart {
+      constructor(frameCount = 20) {
+        this.points = new Set();
+        this.edgeDiffusion = new Set();
+        this.centerDiffusion = new Set();
+        this.arrowTailPoints = [];
+        this.arrowHeadPoints = [];
+        this.frames = {};
+        this.build(2000);
+        this.buildArrow();
+        this.frameCount = frameCount;
+        for (let i = 0; i < frameCount; i++) this.calc(i);
+      }
+
+      build(num) {
+        for (let i = 0; i < num; i++) {
+          const t = Math.random() * 2 * Math.PI;
+          const [x, y] = heartFunction(t);
+          this.points.add([x, y].toString());
+        }
+
+        [...this.points].forEach(p => {
+          const [x, y] = p.split(',').map(Number);
+          for (let i = 0; i < 2; i++) {
+            const [sx, sy] = scatterInside(x, y, 0.05);
+            this.edgeDiffusion.add([sx, sy].toString());
+          }
+        });
+
+        const pointList = [...this.points];
+        for (let i = 0; i < 1000; i++) {
+          const [px, py] = pointList[Math.floor(Math.random() * pointList.length)].split(',').map(Number);
+          const [sx, sy] = scatterInside(px, py, 0.17);
+          this.centerDiffusion.add([sx, sy].toString());
+        }
+      }
+
+      buildArrow() {
+        // Mũi tên từ dưới trái lên trên phải
+        const startX = CENTER_X - 180;
+        const startY = CENTER_Y + 140;
+        const endX = CENTER_X + 180;
+        const endY = CENTER_Y - 140;
+        
+        const angle = Math.atan2(endY - startY, endX - startX);
+
+        // PHẦN ĐUÔI MŨI TÊN
+        const tailLength = 100;
+        
+        // Lông mũi tên ở đuôi (2 cánh nhỏ)
+        const featherLength = 25;
+        const featherAngle = Math.PI / 6;
+        
+        // Lông trái
+        for (let i = 0; i <= 20; i++) {
+          const t = i / 20;
+          const fx = startX + featherLength * Math.cos(angle + Math.PI - featherAngle) * t;
+          const fy = startY + featherLength * Math.sin(angle + Math.PI - featherAngle) * t;
+          for (let w = 0; w <= (1 - t) * 3; w++) {
+            const px = fx + w * Math.cos(angle + Math.PI / 2);
+            const py = fy + w * Math.sin(angle + Math.PI / 2);
+            this.arrowTailPoints.push([px, py, 2]);
+          }
+        }
+        
+        // Lông phải
+        for (let i = 0; i <= 20; i++) {
+          const t = i / 20;
+          const fx = startX + featherLength * Math.cos(angle + Math.PI + featherAngle) * t;
+          const fy = startY + featherLength * Math.sin(angle + Math.PI + featherAngle) * t;
+          for (let w = 0; w <= (1 - t) * 3; w++) {
+            const px = fx - w * Math.cos(angle + Math.PI / 2);
+            const py = fy - w * Math.sin(angle + Math.PI / 2);
+            this.arrowTailPoints.push([px, py, 2]);
+          }
+        }
+        
+        // Thân mũi tên từ đuôi
+        for (let i = 0; i <= 100; i++) {
+          const t = i / 100;
+          const x = startX + tailLength * Math.cos(angle) * t;
+          const y = startY + tailLength * Math.sin(angle) * t;
+          
+          for (let offset = -3; offset <= 3; offset++) {
+            const perpX = x + offset * Math.cos(angle + Math.PI / 2);
+            const perpY = y + offset * Math.sin(angle + Math.PI / 2);
+            this.arrowTailPoints.push([perpX, perpY, 2]);
+          }
+        }
+
+        // PHẦN ĐẦU MŨI TÊN
+        const arrowHeadStart = 100;
+        const arrowHeadLength = 40;
+        const arrowHeadWidth = 20;
+        
+        // Thân mũi tên phần đầu
+        for (let i = 0; i <= 100; i++) {
+          const t = i / 100;
+          const x = endX - arrowHeadStart * Math.cos(angle) + arrowHeadStart * Math.cos(angle) * t;
+          const y = endY - arrowHeadStart * Math.sin(angle) + arrowHeadStart * Math.sin(angle) * t;
+          
+          for (let offset = -3; offset <= 3; offset++) {
+            const perpX = x + offset * Math.cos(angle + Math.PI / 2);
+            const perpY = y + offset * Math.sin(angle + Math.PI / 2);
+            this.arrowHeadPoints.push([perpX, perpY, 2]);
+          }
+        }
+        
+        // Phần nhọn của mũi tên
+        for (let i = 0; i <= 30; i++) {
+          const t = i / 30;
+          // bắt đầu từ endX, endY và mở rộng ra phía sau
+          const baseX = endX - arrowHeadLength * Math.cos(angle) * t;
+          const baseY = endY - arrowHeadLength * Math.sin(angle) * t;
+          // Độ rộng tăng dần khi đi từ đầu nhọn vào trong
+          const width = arrowHeadWidth * t;
+          
+          for (let w = -width; w <= width; w += 1.5) {
+            const px = baseX + w * Math.cos(angle + Math.PI / 2);
+            const py = baseY + w * Math.sin(angle + Math.PI / 2);
+            this.arrowHeadPoints.push([px, py, 2]);
+          }
+        }
+      }
+
+      static calcPosition(x, y, ratio) {
+        const force = 1 / Math.pow((Math.pow(x - CENTER_X, 2)
+                      + Math.pow(y - CENTER_Y, 2)), 0.52);
+        const dx = ratio * force * (x - CENTER_X) + (Math.random() * 2 - 1);
+        const dy = ratio * force * (y - CENTER_Y) + (Math.random() * 2 - 1);
+        return [x - dx, y - dy];
+      }
+
+      calc(frame) {
+        const ratio = 10 * curve(frame / 10 * Math.PI);
+        const haloRadius = 4 + 6 * (1 + curve(frame / 10 * Math.PI));
+        const haloNumber = 3000 + 4000 * Math.pow(Math.abs(curve(frame / 10 * Math.PI)), 2);
+
+        const points = [];
+
+        const haloPoints = new Set();
+        for (let i = 0; i < haloNumber; i++) {
+          const t = Math.random() * 2 * Math.PI;
+          let [x, y] = heartFunction(t, 11.6);
+          [x, y] = shrink(x, y, haloRadius);
+          const key = [x, y].toString();
+          if (!haloPoints.has(key)) {
+            haloPoints.add(key);
+            x += Math.random() * 28 - 14;
+            y += Math.random() * 28 - 14;
+            const size = Math.random() < 0.5 ? 1 : 2;
+            points.push([x, y, size]);
+          }
+        }
+
+        this.points.forEach(p => {
+          let [x, y] = p.split(',').map(Number);
+          [x, y] = Heart.calcPosition(x, y, ratio);
+          const size = Math.floor(Math.random() * 3) + 1;
+          points.push([x, y, size]);
+        });
+
+        this.edgeDiffusion.forEach(p => {
+          let [x, y] = p.split(',').map(Number);
+          [x, y] = Heart.calcPosition(x, y, ratio);
+          const size = Math.random() < 0.5 ? 1 : 2;
+          points.push([x, y, size]);
+        });
+
+        this.centerDiffusion.forEach(p => {
+          let [x, y] = p.split(',').map(Number);
+          [x, y] = Heart.calcPosition(x, y, ratio);
+          const size = Math.random() < 0.5 ? 1 : 2;
+          points.push([x, y, size]);
+        });
+
+        this.arrowTailPoints.forEach(([x, y, s]) => {
+          let [newX, newY] = Heart.calcPosition(x, y, ratio * 0.2);
+          points.push([newX, newY, s]);
+        });
+
+        this.arrowHeadPoints.forEach(([x, y, s]) => {
+          let [newX, newY] = Heart.calcPosition(x, y, ratio * 0.2);
+          points.push([newX, newY, s]);
+        });
+
+        this.frames[frame] = points;
+      }
+
+      render(frame) {
+        const points = this.frames[frame % this.frameCount];
+        points.forEach(([x, y, s]) => {
+          ctx.fillStyle = HEART_COLOR;
+          ctx.fillRect(x, y, s, s);
+        });
+
+        const textRatio = 10 * curve(frame / 10 * Math.PI);
+        const offsetX = textRatio * 0.5 * (Math.random() * 2 - 1);
+        const offsetY = textRatio * 0.5 * (Math.random() * 2 - 1);
+        
+        ctx.save();
+        ctx.fillStyle = HEART_COLOR;
+        ctx.font = 'bold 80px "Dancing Script", cursive';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        ctx.shadowColor = HEART_COLOR;
+        ctx.shadowBlur = 10 + 5 * Math.abs(curve(frame / 10 * Math.PI));
+        
+        ctx.fillText(NAME, CENTER_X + offsetX, CENTER_Y + offsetY);
+        ctx.restore();
+      }
+    }
+
+    const heart = new Heart();
+    let frame = 0;
+
+    function draw() {
+      ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      heart.render(frame);
+      frame++;
+      setTimeout(draw, 160);
+    }
+
+    draw();
+  </script>
+</body>
+</html>
